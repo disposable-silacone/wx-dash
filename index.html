@@ -205,7 +205,8 @@
     .stale { background: var(--warn-bg); color: var(--warn); }
     .old { background: var(--bad-bg); color: var(--bad); }
     .unknown { background: #e5e7eb; color: #374151; }
-    .raw-source { background: #ede9fe; color: #5b21b6; }
+    .timeseries-source { background: #ede9fe; color: #5b21b6; }
+    .raw-source { background: #f3e8ff; color: #7e22ce; }
     .api-source { background: #e0f2fe; color: #075985; }
 
     .source-row {
@@ -299,18 +300,18 @@
   <div class="wrap">
     <section class="hero">
       <div>
-        <h1>Bethlehem-Area Raw Observation Dashboard</h1>
+        <h1>Bethlehem-Area NWS Time Series Dashboard</h1>
         <p>
-          This version prioritizes the raw observation tables for the stations closest to Bethlehem so the displayed
-          temperature matches the posted Fahrenheit reading instead of a rounded Celsius-to-Fahrenheit conversion.
-          When raw parsing fails, it falls back to the NWS API for that station.
+          This version prioritizes the NWS time series page for the stations closest to Bethlehem so the displayed
+          temperature can track the most recent posted reading more closely. If time series parsing fails, it falls
+          back to the raw observation table, and then to the NWS API.
         </p>
         <div class="hero-meta" id="heroMeta">Loading latest observations...</div>
       </div>
       <div class="actions">
         <button class="btn" id="refreshBtn">Refresh now</button>
         <div class="small-note">
-          Auto-refreshes every 2 minutes. Closest stations use raw table temperature first, then API fallback.
+          Auto-refreshes every 2 minutes. Closest stations use NWS time series first, then raw table, then API.
         </div>
       </div>
     </section>
@@ -324,22 +325,22 @@
     <section class="grid" id="grid"></section>
 
     <div class="footer">
-      For the closest stations, the temperature comes from the raw weather.gov observation table when available.
-      Other structured fields still come from the NWS API. This helps preserve the exact posted Fahrenheit value while
-      keeping wind, humidity, pressure, and dew point easy to display.
+      For the closest stations, temperature comes from the NWS time series page when available. If that fails,
+      the dashboard falls back to the raw weather.gov observation table, then the API. Structured fields like wind,
+      humidity, pressure, and dew point still come from the NWS API.
     </div>
   </div>
 
   <script>
     const STATIONS = [
-      { id: 'KABE', name: 'Lehigh Valley International', note: 'Closest major station to Bethlehem; highest priority raw source', rawPriority: true },
-      { id: 'KXLL', name: 'Allentown Queen City', note: 'Very close local comparison point', rawPriority: true },
-      { id: 'KUKT', name: 'Quakertown', note: 'Useful south / southeast comparison', rawPriority: true },
-      { id: 'K22N', name: 'Slatington / Flying M', note: 'Northwest and elevation comparison', rawPriority: true },
-      { id: 'KRDG', name: 'Reading', note: 'Useful for incoming weather from the west', rawPriority: false },
-      { id: 'KAVP', name: 'Wilkes-Barre / Scranton', note: 'Northern cold-air comparison', rawPriority: false },
-      { id: 'KDYL', name: 'Doylestown', note: 'Bucks County comparison', rawPriority: false },
-      { id: 'KTTN', name: 'Trenton-Mercer', note: 'Farther southeast benchmark', rawPriority: false }
+      { id: 'KABE', name: 'Lehigh Valley International', note: 'Closest major station to Bethlehem; highest priority time series source', prioritySeries: true },
+      { id: 'KXLL', name: 'Allentown Queen City', note: 'Very close local comparison point', prioritySeries: true },
+      { id: 'KUKT', name: 'Quakertown', note: 'Useful south / southeast comparison', prioritySeries: true },
+      { id: 'K22N', name: 'Slatington / Flying M', note: 'Northwest and elevation comparison', prioritySeries: true },
+      { id: 'KRDG', name: 'Reading', note: 'Useful for incoming weather from the west', prioritySeries: false },
+      { id: 'KAVP', name: 'Wilkes-Barre / Scranton', note: 'Northern cold-air comparison', prioritySeries: false },
+      { id: 'KDYL', name: 'Doylestown', note: 'Bucks County comparison', prioritySeries: false },
+      { id: 'KTTN', name: 'Trenton-Mercer', note: 'Farther southeast benchmark', prioritySeries: false }
     ];
 
     const grid = document.getElementById('grid');
@@ -434,7 +435,6 @@
       const response = await fetch(rawLink);
       if (!response.ok) throw new Error(`Raw HTTP ${response.status}`);
       const html = await response.text();
-
       const doc = new DOMParser().parseFromString(html, 'text/html');
       const rows = Array.from(doc.querySelectorAll('table tr'));
 
@@ -446,7 +446,6 @@
         const timeText = cells[1] || '';
         const tempCell = cells[6] || '';
         const tempMatch = tempCell.match(/-?\d+(?:\.\d+)?/);
-
         if (!tempMatch) continue;
 
         return {
@@ -462,32 +461,90 @@
       throw new Error('No usable raw observation row found');
     }
 
-    function chooseTemperature(station, apiData, rawData, rawError) {
-      const shouldPreferRaw = station.rawPriority;
-      if (shouldPreferRaw && rawData && rawData.rawTempF != null) {
+    async function fetchTimeSeriesTemperature(station) {
+      const seriesLink = `https://www.weather.gov/wrh/timeseries?site=${station.id.toLowerCase()}`;
+      const response = await fetch(seriesLink);
+      if (!response.ok) throw new Error(`Time series HTTP ${response.status}`);
+      const html = await response.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+
+      const scripts = Array.from(doc.querySelectorAll('script')).map(s => s.textContent || '');
+      for (const script of scripts) {
+        const arrayMatches = [...script.matchAll(/(?:temp|temperature)[^\[]*\[([^\]]+)\]/gi)];
+        for (const match of arrayMatches) {
+          const nums = match[1].match(/-?\d+(?:\.\d+)?/g);
+          if (nums && nums.length) {
+            return {
+              seriesLink,
+              seriesTempF: Number(nums[nums.length - 1]),
+              seriesObservedText: 'Latest time series reading',
+              seriesMinutes: null
+            };
+          }
+        }
+      }
+
+      const text = doc.body ? doc.body.innerText : html;
+      const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+      for (const line of lines) {
+        const normalized = line.replace(/\s+/g, ' ');
+        const tempMatch = normalized.match(/(-?\d+(?:\.\d+)?)\s*°?F/i);
+        if (!tempMatch) continue;
+
+        const observedMatch = normalized.match(/([A-Z][a-z]{2}\s+\d{1,2},\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
+        return {
+          seriesLink,
+          seriesTempF: Number(tempMatch[1]),
+          seriesObservedText: observedMatch ? observedMatch[1] : 'Latest time series reading',
+          seriesMinutes: null
+        };
+      }
+
+      throw new Error('No usable time series temperature found');
+    }
+
+    function chooseTemperature(station, apiData, seriesData, seriesError, rawData, rawError) {
+      const shouldPreferSeries = station.prioritySeries;
+
+      if (shouldPreferSeries && seriesData && seriesData.seriesTempF != null) {
+        return {
+          sourceType: 'timeseries',
+          sourceLabel: 'Temp from NWS time series',
+          tempF: seriesData.seriesTempF,
+          observedText: seriesData.seriesObservedText || rawData?.rawObservedText || apiData.apiTimestampFormatted,
+          minutes: seriesData.seriesMinutes ?? rawData?.rawMinutes ?? apiData.apiMinutes,
+          rawError: rawError || null,
+          seriesError: null
+        };
+      }
+
+      if (shouldPreferSeries && rawData && rawData.rawTempF != null) {
         return {
           sourceType: 'raw',
           sourceLabel: 'Temp from raw table',
           tempF: rawData.rawTempF,
           observedText: rawData.rawObservedText || apiData.apiTimestampFormatted,
           minutes: rawData.rawMinutes ?? apiData.apiMinutes,
-          rawError: null
+          rawError: null,
+          seriesError: seriesError || null
         };
       }
 
       return {
         sourceType: 'api',
-        sourceLabel: shouldPreferRaw && rawError ? 'Temp fell back to API' : 'Temp from API',
+        sourceLabel: shouldPreferSeries && (seriesError || rawError) ? 'Temp fell back to API' : 'Temp from API',
         tempF: apiData.apiTempF,
         observedText: apiData.apiTimestampFormatted,
         minutes: apiData.apiMinutes,
-        rawError: rawError || null
+        rawError: rawError || null,
+        seriesError: seriesError || null
       };
     }
 
     function buildSummary(data) {
       const validTemps = data.map(d => d.tempF).filter(v => v != null);
       const freshCount = data.filter(d => d.minutes != null && d.minutes <= 10).length;
+      const seriesCount = data.filter(d => d.sourceType === 'timeseries').length;
       const rawCount = data.filter(d => d.sourceType === 'raw').length;
       const avgTemp = validTemps.length ? validTemps.reduce((a, b) => a + b, 0) / validTemps.length : null;
       const minTemp = validTemps.length ? Math.min(...validTemps) : null;
@@ -499,7 +556,11 @@
           <div class="summary-value">${data.length}</div>
         </div>
         <div class="summary-card">
-          <div class="summary-label">Using raw temp</div>
+          <div class="summary-label">Using time series temp</div>
+          <div class="summary-value">${seriesCount}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Using raw temp fallback</div>
           <div class="summary-value">${rawCount}</div>
         </div>
         <div class="summary-card">
@@ -545,14 +606,23 @@
               <div class="links">
                 <a href="${safeText(d.rawLink)}" target="_blank" rel="noopener noreferrer">Raw observation table</a>
                 <a href="${safeText(d.apiLink)}" target="_blank" rel="noopener noreferrer">API endpoint</a>
+                <a href="${safeText(d.seriesLink)}" target="_blank" rel="noopener noreferrer">NWS time series</a>
               </div>
             </article>
           `;
         }
 
         const fresh = freshness(d.minutes);
-        const sourceClass = d.sourceType === 'raw' ? 'raw-source' : 'api-source';
-        const fallbackNote = d.rawError ? `<div class="error">Raw temp unavailable for this refresh: ${safeText(d.rawError)}</div>` : '';
+        const sourceClass = d.sourceType === 'timeseries'
+          ? 'timeseries-source'
+          : d.sourceType === 'raw'
+            ? 'raw-source'
+            : 'api-source';
+
+        const notes = [];
+        if (d.seriesError) notes.push(`<div class="error">Time series temp unavailable for this refresh: ${safeText(d.seriesError)}</div>`);
+        if (d.rawError && d.sourceType === 'api') notes.push(`<div class="error">Raw temp unavailable for this refresh: ${safeText(d.rawError)}</div>`);
+        const fallbackNote = notes.join('');
 
         return `
           <article class="card">
@@ -606,7 +676,7 @@
             <div class="links">
               <a href="${safeText(d.rawLink)}" target="_blank" rel="noopener noreferrer">Raw observation table</a>
               <a href="${safeText(d.apiLink)}" target="_blank" rel="noopener noreferrer">API endpoint</a>
-              <a href="https://www.weather.gov/wrh/timeseries?site=${encodeURIComponent(d.id.toLowerCase())}" target="_blank" rel="noopener noreferrer">NWS time series</a>
+              <a href="${safeText(d.seriesLink)}" target="_blank" rel="noopener noreferrer">NWS time series</a>
             </div>
           </article>
         `;
@@ -621,33 +691,46 @@
       const results = await Promise.all(STATIONS.map(async station => {
         const rawLink = `https://forecast.weather.gov/data/obhistory/${station.id}.html`;
         const apiLink = `https://api.weather.gov/stations/${station.id}/observations/latest`;
+        const seriesLink = `https://www.weather.gov/wrh/timeseries?site=${station.id.toLowerCase()}`;
 
         try {
           const apiData = await fetchApiObservation(station);
+          let seriesData = null;
+          let seriesError = null;
           let rawData = null;
           let rawError = null;
 
-          if (station.rawPriority) {
+          if (station.prioritySeries) {
             try {
-              rawData = await fetchRawTemperature(station);
+              seriesData = await fetchTimeSeriesTemperature(station);
             } catch (error) {
-              rawError = error.message || 'Raw fetch failed';
+              seriesError = error.message || 'Time series fetch failed';
+            }
+
+            if (!seriesData) {
+              try {
+                rawData = await fetchRawTemperature(station);
+              } catch (error) {
+                rawError = error.message || 'Raw fetch failed';
+              }
             }
           }
 
-          const chosen = chooseTemperature(station, apiData, rawData, rawError);
+          const chosen = chooseTemperature(station, apiData, seriesData, seriesError, rawData, rawError);
 
           return {
             ...station,
             error: null,
             rawLink,
             apiLink,
+            seriesLink,
             sourceType: chosen.sourceType,
             sourceLabel: chosen.sourceLabel,
             tempF: chosen.tempF,
             observedText: chosen.observedText,
             minutes: chosen.minutes,
             rawError: chosen.rawError,
+            seriesError: chosen.seriesError,
             textDescription: apiData.textDescription,
             windText: apiData.windText,
             dewpointF: apiData.dewpointF,
@@ -660,7 +743,8 @@
             ...station,
             error: error.message || 'Request failed',
             rawLink,
-            apiLink
+            apiLink,
+            seriesLink
           };
         }
       }));
