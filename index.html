@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Allentown Weather Dashboard</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #142033;
+      --muted: #5b677a;
+      --border: #dbe3ef;
+      --accent: #1d4ed8;
+      --accent-soft: #dbeafe;
+      --good: #166534;
+      --good-bg: #dcfce7;
+      --warn: #92400e;
+      --warn-bg: #fef3c7;
+      --bad: #991b1b;
+      --bad-bg: #fee2e2;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #ffffff 0%, #eef4ff 100%);
+      border: 1px solid var(--border);
+      border-radius: 26px;
+      padding: 24px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 22px;
+    }
+
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.8rem, 3vw, 2.6rem);
+      line-height: 1.1;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 820px;
+      line-height: 1.55;
+    }
+
+    .hero-meta {
+      margin-top: 10px;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .btn {
+      border: 0;
+      background: var(--accent);
+      color: white;
+      padding: 12px 16px;
+      border-radius: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(29, 78, 216, 0.18);
+    }
+
+    .btn:hover { filter: brightness(1.05); }
+    .btn:disabled { opacity: 0.7; cursor: wait; }
+
+    .small-note {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+
+    .summary-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .summary-label {
+      color: var(--muted);
+      font-size: 0.86rem;
+      margin-bottom: 6px;
+    }
+
+    .summary-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .search {
+      flex: 1 1 240px;
+      min-width: 220px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      background: white;
+      border-radius: 14px;
+      font-size: 1rem;
+      color: var(--text);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card-top {
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .station-id {
+      display: inline-block;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      background: var(--accent-soft);
+      padding: 5px 9px;
+      border-radius: 999px;
+      margin-bottom: 8px;
+    }
+
+    .station-name {
+      font-size: 1.18rem;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .station-note {
+      margin: 4px 0 0;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 0.95rem;
+    }
+
+    .badge {
+      white-space: nowrap;
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+    }
+
+    .fresh { background: var(--good-bg); color: var(--good); }
+    .stale { background: var(--warn-bg); color: var(--warn); }
+    .old { background: var(--bad-bg); color: var(--bad); }
+    .unknown { background: #e5e7eb; color: #374151; }
+
+    .temp-row {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .temp-main {
+      font-size: 2.5rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .temp-desc {
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      background: #fbfdff;
+    }
+
+    .metric-label {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+
+    .metric-value {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: auto;
+    }
+
+    .links a {
+      text-decoration: none;
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .error {
+      border: 1px solid #fecaca;
+      background: #fff1f2;
+      color: #9f1239;
+      border-radius: 14px;
+      padding: 12px;
+      line-height: 1.5;
+    }
+
+    .footer {
+      margin-top: 22px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 640px) {
+      .wrap { padding: 14px; }
+      .hero { padding: 18px; border-radius: 20px; }
+      .card { border-radius: 18px; }
+      .temp-main { font-size: 2.1rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div>
+        <h1>Allentown-Area Government Weather Dashboard</h1>
+        <p>
+          Live readings from nearby FAA / NWS observation stations. This page pulls the latest available
+          observations directly from the National Weather Service API and gives you quick links to the raw
+          observation tables for each station.
+        </p>
+        <div class="hero-meta" id="heroMeta">Loading latest observations...</div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="refreshBtn">Refresh now</button>
+        <div class="small-note">Auto-refreshes every 2 minutes.</div>
+      </div>
+    </section>
+
+    <section class="summary" id="summary"></section>
+
+    <section class="controls">
+      <input id="searchInput" class="search" type="text" placeholder="Filter stations by ID, city, or note..." />
+    </section>
+
+    <section class="grid" id="grid"></section>
+
+    <div class="footer">
+      Station links open the exact raw observation pages on weather.gov. Temperatures are shown in °F, wind in mph,
+      and pressure in inches of mercury when available. If a station looks stale, it usually means the upstream sensor
+      has not published a newer observation yet.
+    </div>
+  </div>
+
+  <script>
+    const STATIONS = [
+      { id: 'KABE', name: 'Lehigh Valley International', note: 'Best baseline for Allentown' },
+      { id: 'KXLL', name: 'Allentown Queen City', note: 'Very local comparison point' },
+      { id: 'KUKT', name: 'Quakertown', note: 'South / southeast comparison' },
+      { id: 'K22N', name: 'Slatington / Flying M', note: 'Northwest and elevation comparison' },
+      { id: 'KRDG', name: 'Reading', note: 'Useful for incoming weather from the west' },
+      { id: 'KAVP', name: 'Wilkes-Barre / Scranton', note: 'Northern cold-air comparison' },
+      { id: 'KDYL', name: 'Doylestown', note: 'Bucks County comparison' },
+      { id: 'KTTN', name: 'Trenton-Mercer', note: 'Farther southeast benchmark' }
+    ];
+
+    const grid = document.getElementById('grid');
+    const summary = document.getElementById('summary');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const heroMeta = document.getElementById('heroMeta');
+    const searchInput = document.getElementById('searchInput');
+
+    let stationData = [];
+
+    function cToF(c) {
+      return c == null || Number.isNaN(c) ? null : (c * 9 / 5) + 32;
+    }
+
+    function mpsToMph(mps) {
+      return mps == null || Number.isNaN(mps) ? null : mps * 2.23694;
+    }
+
+    function pascalToInHg(pa) {
+      return pa == null || Number.isNaN(pa) ? null : pa * 0.0002953;
+    }
+
+    function metersToFeet(m) {
+      return m == null || Number.isNaN(m) ? null : m * 3.28084;
+    }
+
+    function formatTime(iso) {
+      if (!iso) return '—';
+      return new Date(iso).toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+    }
+
+    function minutesAgo(iso) {
+      if (!iso) return null;
+      return Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    }
+
+    function freshness(mins) {
+      if (mins == null) return { label: 'Unknown', className: 'unknown' };
+      if (mins <= 10) return { label: `${mins} min ago`, className: 'fresh' };
+      if (mins <= 25) return { label: `${mins} min ago`, className: 'stale' };
+      return { label: `${mins} min ago`, className: 'old' };
+    }
+
+    function safeText(text) {
+      return String(text ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      })[ch]);
+    }
+
+    function buildSummary(data) {
+      const validTemps = data.map(d => d.tempF).filter(v => v != null);
+      const freshCount = data.filter(d => d.minutes != null && d.minutes <= 10).length;
+      const avgTemp = validTemps.length ? validTemps.reduce((a, b) => a + b, 0) / validTemps.length : null;
+      const minTemp = validTemps.length ? Math.min(...validTemps) : null;
+      const maxTemp = validTemps.length ? Math.max(...validTemps) : null;
+
+      summary.innerHTML = `
+        <div class="summary-card">
+          <div class="summary-label">Stations loaded</div>
+          <div class="summary-value">${data.length}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Fresh readings (≤10 min)</div>
+          <div class="summary-value">${freshCount}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Average temp</div>
+          <div class="summary-value">${avgTemp == null ? '—' : `${avgTemp.toFixed(1)}°F`}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Regional range</div>
+          <div class="summary-value">${minTemp == null ? '—' : `${minTemp.toFixed(1)}°`} ${maxTemp == null ? '' : `to ${maxTemp.toFixed(1)}°F`}</div>
+        </div>
+      `;
+    }
+
+    function buildCards(data) {
+      const filter = searchInput.value.trim().toLowerCase();
+      const filtered = data.filter(d => {
+        const haystack = `${d.id} ${d.name} ${d.note}`.toLowerCase();
+        return haystack.includes(filter);
+      });
+
+      if (!filtered.length) {
+        grid.innerHTML = '<div class="card"><div class="station-name">No matching stations</div><div class="station-note">Try a different filter.</div></div>';
+        return;
+      }
+
+      grid.innerHTML = filtered.map(d => {
+        if (d.error) {
+          return `
+            <article class="card">
+              <div class="card-top">
+                <div>
+                  <div class="station-id">${safeText(d.id)}</div>
+                  <h2 class="station-name">${safeText(d.name)}</h2>
+                  <p class="station-note">${safeText(d.note)}</p>
+                </div>
+                <div class="badge old">Error</div>
+              </div>
+              <div class="error">Could not load the latest observation: ${safeText(d.error)}</div>
+              <div class="links">
+                <a href="${safeText(d.rawLink)}" target="_blank" rel="noopener noreferrer">Raw observation table</a>
+                <a href="${safeText(d.apiLink)}" target="_blank" rel="noopener noreferrer">API endpoint</a>
+              </div>
+            </article>
+          `;
+        }
+
+        const fresh = freshness(d.minutes);
+        return `
+          <article class="card">
+            <div class="card-top">
+              <div>
+                <div class="station-id">${safeText(d.id)}</div>
+                <h2 class="station-name">${safeText(d.name)}</h2>
+                <p class="station-note">${safeText(d.note)}</p>
+              </div>
+              <div class="badge ${safeText(fresh.className)}">${safeText(fresh.label)}</div>
+            </div>
+
+            <div class="temp-row">
+              <div class="temp-main">${d.tempF == null ? '—' : `${d.tempF.toFixed(1)}°F`}</div>
+              <div class="temp-desc">${safeText(d.textDescription || 'No text description')}</div>
+            </div>
+
+            <div class="metrics">
+              <div class="metric">
+                <div class="metric-label">Observed</div>
+                <div class="metric-value">${safeText(d.timestampFormatted)}</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Wind</div>
+                <div class="metric-value">${safeText(d.windText)}</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Dew point</div>
+                <div class="metric-value">${d.dewpointF == null ? '—' : `${d.dewpointF.toFixed(1)}°F`}</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Relative humidity</div>
+                <div class="metric-value">${d.humidity == null ? '—' : `${Math.round(d.humidity)}%`}</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Pressure</div>
+                <div class="metric-value">${d.pressureInHg == null ? '—' : `${d.pressureInHg.toFixed(2)} inHg`}</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Elevation</div>
+                <div class="metric-value">${d.elevationFt == null ? '—' : `${Math.round(d.elevationFt)} ft`}</div>
+              </div>
+            </div>
+
+            <div class="links">
+              <a href="${safeText(d.rawLink)}" target="_blank" rel="noopener noreferrer">Raw observation table</a>
+              <a href="${safeText(d.apiLink)}" target="_blank" rel="noopener noreferrer">API endpoint</a>
+              <a href="https://www.weather.gov/wrh/timeseries?site=${encodeURIComponent(d.id.toLowerCase())}" target="_blank" rel="noopener noreferrer">NWS time series</a>
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    async function loadStations() {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = 'Refreshing...';
+      heroMeta.textContent = 'Loading latest observations...';
+
+      const results = await Promise.all(STATIONS.map(async station => {
+        const apiLink = `https://api.weather.gov/stations/${station.id}/observations/latest`;
+        const rawLink = `https://forecast.weather.gov/data/obhistory/${station.id}.html`;
+
+        try {
+          const response = await fetch(apiLink, {
+            headers: { 'Accept': 'application/geo+json' }
+          });
+
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+          const json = await response.json();
+          const p = json.properties || {};
+
+          const tempF = cToF(p.temperature?.value);
+          const dewpointF = cToF(p.dewpoint?.value);
+          const windMph = mpsToMph(p.windSpeed?.value);
+          const pressureInHg = pascalToInHg(p.barometricPressure?.value);
+          const elevationFt = metersToFeet(p.elevation?.value);
+          const minutes = minutesAgo(p.timestamp);
+          const direction = p.windDirection?.value;
+
+          return {
+            ...station,
+            error: null,
+            apiLink,
+            rawLink,
+            timestamp: p.timestamp,
+            timestampFormatted: formatTime(p.timestamp),
+            minutes,
+            tempF,
+            dewpointF,
+            humidity: p.relativeHumidity?.value,
+            pressureInHg,
+            elevationFt,
+            textDescription: p.textDescription,
+            windText: windMph == null
+              ? '—'
+              : `${Math.round(windMph)} mph${direction == null ? '' : ` @ ${Math.round(direction)}°`}`
+          };
+        } catch (error) {
+          return {
+            ...station,
+            error: error.message || 'Request failed',
+            apiLink,
+            rawLink
+          };
+        }
+      }));
+
+      stationData = results;
+      buildSummary(results.filter(r => !r.error));
+      buildCards(results);
+
+      const now = new Date();
+      heroMeta.textContent = `Last refreshed ${now.toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit'
+      })}.`;
+
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = 'Refresh now';
+    }
+
+    refreshBtn.addEventListener('click', loadStations);
+    searchInput.addEventListener('input', () => buildCards(stationData));
+
+    loadStations();
+    setInterval(loadStations, 120000);
+  </script>
+</body>
+</html>
