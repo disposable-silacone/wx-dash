@@ -339,8 +339,9 @@
   </div>
 
   <script>
-    // Token: https://customer.synopticdata.com/credentials/ — 401 invalid token; 403 often = origin/referrer
-    // restrictions on the token (must add your GitHub Pages URL, or use a local server for dev).
+    // Token: https://customer.synopticdata.com/credentials/
+    // If SUMMARY says "Invalid request per token rules", open the token → relax HTTP Origin / Referrer
+    // rules so your exact site (e.g. https://user.github.io) matches, or contact Synoptic support.
     const SYNOPTIC_TOKEN = 'a97a5717d53143719de3c3dfbd338b7d';
 
     const STATIONS = [
@@ -499,6 +500,12 @@
       const seriesLink = `https://api.synopticdata.com/v2/stations/timeseries?${params.toString()}`;
       const response = await fetch(seriesLink);
       const json = await response.json();
+      const sum = json.SUMMARY;
+      if (sum && sum.RESPONSE_CODE !== 1) {
+        const msg = sum.RESPONSE_MESSAGE || 'Synoptic API error';
+        const code = sum.HTTP_STATUS_CODE != null ? ` [${sum.HTTP_STATUS_CODE}]` : '';
+        throw new Error(`Synoptic: ${msg}${code}`);
+      }
       if (!response.ok) {
         const msg = json.message || json.STATUS || '';
         throw new Error(`Synoptic HTTP ${response.status}${msg ? `: ${msg}` : ''}`);
